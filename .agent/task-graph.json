@@ -1,0 +1,138 @@
+{
+  "version": "1.0",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Backend project scaffold: FastAPI + SQLite + run CRUD",
+      "milestone": "M1",
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "TASK-002",
+      "title": "Pipeline runner stub + BackgroundTask wiring",
+      "milestone": "M1",
+      "status": "pending",
+      "depends_on": ["TASK-001"]
+    },
+    {
+      "id": "TASK-003",
+      "title": "Diff Analyzer: file-level diff",
+      "milestone": "M2",
+      "status": "pending",
+      "depends_on": ["TASK-002"]
+    },
+    {
+      "id": "TASK-004",
+      "title": "Diff Analyzer: AST symbol diff",
+      "milestone": "M2",
+      "status": "pending",
+      "depends_on": ["TASK-003"]
+    },
+    {
+      "id": "TASK-005",
+      "title": "Graph Builder: import + call graph from ast",
+      "milestone": "M3",
+      "status": "pending",
+      "depends_on": ["TASK-004"]
+    },
+    {
+      "id": "TASK-006",
+      "title": "Blast Radius: NetworkX reachability engine",
+      "milestone": "M3",
+      "status": "pending",
+      "depends_on": ["TASK-005"]
+    },
+    {
+      "id": "TASK-007",
+      "title": "Test Selector: symbol-to-test mapping",
+      "milestone": "M4",
+      "status": "pending",
+      "depends_on": ["TASK-006"]
+    },
+    {
+      "id": "TASK-008",
+      "title": "Sandbox Executor: Docker image + Docker SDK integration",
+      "milestone": "M5",
+      "status": "pending",
+      "depends_on": ["TASK-007"]
+    },
+    {
+      "id": "TASK-009",
+      "title": "Result Comparator: deterministic behavioral comparison",
+      "milestone": "M6",
+      "status": "pending",
+      "depends_on": ["TASK-008"]
+    },
+    {
+      "id": "TASK-010",
+      "title": "Evidence Collector + Report Assembler + classification logic",
+      "milestone": "M6",
+      "status": "pending",
+      "depends_on": ["TASK-009"]
+    },
+    {
+      "id": "TASK-011",
+      "title": "AI Interpreter: Gemini Flash integration",
+      "milestone": "M7",
+      "status": "pending",
+      "depends_on": ["TASK-010"]
+    },
+    {
+      "id": "TASK-012",
+      "title": "Full pipeline integration + integration test",
+      "milestone": "M8",
+      "status": "pending",
+      "depends_on": ["TASK-011"]
+    },
+    {
+      "id": "TASK-013",
+      "title": "Frontend scaffold: Vite + React + Tailwind + shadcn",
+      "milestone": "M9",
+      "status": "pending",
+      "depends_on": []
+    },
+    {
+      "id": "TASK-014",
+      "title": "Upload page: zip inputs + Analyze button + status polling",
+      "milestone": "M9",
+      "status": "pending",
+      "depends_on": ["TASK-013"]
+    },
+    {
+      "id": "TASK-015",
+      "title": "Report page: Summary + Changes tabs",
+      "milestone": "M9",
+      "status": "pending",
+      "depends_on": ["TASK-014"]
+    },
+    {
+      "id": "TASK-016",
+      "title": "Report page: Impact tab (React Flow blast radius graph)",
+      "milestone": "M9",
+      "status": "pending",
+      "depends_on": ["TASK-015"]
+    },
+    {
+      "id": "TASK-017",
+      "title": "Report page: Tests + Evidence + AI Narrative tabs",
+      "milestone": "M9",
+      "status": "pending",
+      "depends_on": ["TASK-016"]
+    },
+    {
+      "id": "TASK-018",
+      "title": "Demo migration: build original/ and migrated/ projects",
+      "milestone": "M10",
+      "status": "pending",
+      "depends_on": ["TASK-012"]
+    },
+    {
+      "id": "TASK-019",
+      "title": "README + demo script + end-to-end validation",
+      "milestone": "M10",
+      "status": "pending",
+      "depends_on": ["TASK-017", "TASK-018"]
+    }
+  ]
+}
