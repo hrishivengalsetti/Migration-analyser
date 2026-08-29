@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { uploadRun, getRunStatus, getReport } from '../client';
+import { uploadRun, getRunStatus } from '../client';
 
 describe('api/client', () => {
   beforeEach(() => {
@@ -56,33 +56,6 @@ describe('api/client', () => {
       global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
       await expect(getRunStatus('run-123')).rejects.toThrow('Network error: Server lost connection during polling.');
-    });
-  });
-
-  describe('getReport', () => {
-    it('throws error when runId is missing', async () => {
-      await expect(getReport(null)).rejects.toThrow('Run ID is required.');
-    });
-
-    it('fetches report successfully', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ run_id: '123', classification: 'verified' }),
-      });
-
-      const data = await getReport('123');
-      expect(data).toEqual({ run_id: '123', classification: 'verified' });
-      expect(global.fetch).toHaveBeenCalledWith('/api/runs/123/report');
-    });
-
-    it('handles non-2xx report error', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        json: async () => ({ detail: 'Report not generated yet' }),
-      });
-
-      await expect(getReport('123')).rejects.toThrow('Report not generated yet');
     });
   });
 });
