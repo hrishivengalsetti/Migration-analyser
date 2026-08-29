@@ -72,3 +72,35 @@ export async function getRunStatus(runId) {
     throw err;
   }
 }
+
+export async function getReport(runId) {
+  if (!runId) {
+    throw new Error('Run ID is required.');
+  }
+
+  try {
+    const res = await fetch(`/api/runs/${runId}/report`);
+
+    if (!res.ok) {
+      let errorMessage = `Failed to fetch report (${res.status})`;
+      try {
+        const errorData = await res.json();
+        if (errorData.detail) {
+          errorMessage = typeof errorData.detail === 'string'
+            ? errorData.detail
+            : JSON.stringify(errorData.detail);
+        }
+      } catch (_) {
+        // ignore json parse error
+      }
+      throw new Error(errorMessage);
+    }
+
+    return await res.json();
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      throw new Error('Network error: Unable to load report from server.');
+    }
+    throw err;
+  }
+}
