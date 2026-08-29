@@ -22,6 +22,7 @@ Last updated: 2026-08-28
 - [x] TASK-005: Dependency Graph Builder (NetworkX)
 - [x] TASK-006: Blast Radius Calculator
 - [x] TASK-007: Test Selector — Static Symbol-to-Test Mapping
+- [x] TASK-008: Test Executor — Docker Sandbox Execution & Capture
 
 ## What Is In Progress
 
@@ -33,7 +34,7 @@ Last updated: 2026-08-28
 
 ## Next Task to Assign
 
-**TASK-008**: Test Executor — Docker Sandbox Execution & Capture
+**TASK-009**: Output Comparator — Original vs Migrated Results
 
 ## Known Blockers
 
