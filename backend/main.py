@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import database
 from models import CreateRunResponse, Run, RunStatus
-from pipeline.runner import run_pipeline
+from brain.runner import run_pipeline
 
 DATA_DIR = Path(__file__).parent / "data" / "runs"
 

@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from pipeline.diff_analyzer import analyze_file_diff
+from brain.diff_analyzer import analyze_file_diff
 from models import FileStatus
 
 def test_detects_added_file(tmp_path: Path):
