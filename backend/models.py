@@ -52,6 +52,33 @@ class RunStatus(str, Enum):
     COMPLETE = "complete"
     FAILED = "failed"
 
+class ComparisonStatus(str, Enum):
+    REGRESSION = "regression"
+    FIXED = "fixed"
+    UNCHANGED = "unchanged"
+    ADDED = "added"
+    DELETED = "deleted"
+    UNVERIFIED = "unverified"
+
+class TestResultComparison(BaseModel):
+    test_id: str                          # nodeid (e.g. "tests/test_api.py::test_login")
+    status_original: Optional[str] = None # "passed" | "failed" | "error" | "skipped" | None
+    status_migrated: Optional[str] = None # "passed" | "failed" | "error" | "skipped" | None
+    comparison: ComparisonStatus
+    stdout_migrated: Optional[str] = None
+    stderr_migrated: Optional[str] = None
+    message: Optional[str] = None
+
+class BehavioralComparison(BaseModel):
+    total_tests: int
+    regressions_count: int
+    fixed_count: int
+    unchanged_count: int
+    added_count: int
+    deleted_count: int
+    unverified_count: int
+    test_results: list[TestResultComparison]
+
 class Run(BaseModel):
     run_id: str
     status: RunStatus
