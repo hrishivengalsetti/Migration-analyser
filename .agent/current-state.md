@@ -21,6 +21,7 @@ Last updated: 2026-08-28
 - [x] TASK-004: Diff Analyzer — AST Symbol Diff
 - [x] TASK-005: Dependency Graph Builder (NetworkX)
 - [x] TASK-006: Blast Radius Calculator
+- [x] TASK-007: Test Selector — Static Symbol-to-Test Mapping
 
 ## What Is In Progress
 
@@ -32,7 +33,7 @@ Last updated: 2026-08-28
 
 ## Next Task to Assign
 
-**TASK-007**: Test Selector (AST Static Mapping)
+**TASK-008**: Test Executor — Docker Sandbox Execution & Capture
 
 ## Known Blockers
 
