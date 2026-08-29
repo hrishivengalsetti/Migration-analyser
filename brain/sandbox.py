@@ -60,14 +60,14 @@ def run_tests_in_sandbox(code_path: str, test_nodeids: list[str] | None = None, 
         }
 
     # 2. Build pytest command
-    base_cmd = ["pytest", "--json-report", "--json-report-file=/tmp/results.json", "-q"]
+    base_cmd = ["--json-report", "--json-report-file=/tmp/results.json", "-q"]
     
     if test_nodeids is None:
-        cmd_args = ["/workspace"] + base_cmd[1:]
+        cmd_args = ["/workspace"] + base_cmd
     else:
         # Convert selected module IDs to pytest nodeids
         target_paths = [_translate_nodeid(t) for t in test_nodeids]
-        cmd_args = [base_cmd[0]] + target_paths + base_cmd[1:]
+        cmd_args = target_paths + base_cmd
 
     command_str = " ".join(cmd_args)
 
@@ -78,7 +78,7 @@ def run_tests_in_sandbox(code_path: str, test_nodeids: list[str] | None = None, 
     try:
         container = client.containers.run(
             image="migration-verifier-runner:latest",
-            command=command_str,
+            command=cmd_args,
             volumes={str(Path(code_path).resolve()): {"bind": "/workspace", "mode": "ro"}},
             network_disabled=True,
             mem_limit="512m",

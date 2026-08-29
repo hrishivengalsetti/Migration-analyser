@@ -10,4 +10,5 @@ RUN chmod 777 /tmp
 
 USER nobody
 
-CMD ["pytest", "/workspace", "--json-report", "--json-report-file=/tmp/results.json", "-q"]
+ENTRYPOINT ["pytest"]
+CMD ["/workspace", "--json-report", "--json-report-file=/tmp/results.json", "-q"]
