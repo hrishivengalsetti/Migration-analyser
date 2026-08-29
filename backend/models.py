@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel
 
 class FileStatus(str, Enum):
@@ -87,6 +87,52 @@ class Evidence(BaseModel):
     failing_tests: list[str]                       # test nodeids that failed/errored in migrated
     passing_tests: list[str]                       # test nodeids that passed in migrated
     unverified_tests: list[str]                    # test nodeids that were unverified
+
+class AIInterpretation(BaseModel):
+    migration_intent: str
+    risk_summary: str
+    key_concerns: list[str]
+    confidence: Literal["high", "medium", "low", "none"]
+
+class Classification(str, Enum):
+    VERIFIED = "verified"
+    PARTIALLY_VERIFIED = "partially_verified"
+    REGRESSION_DETECTED = "regression_detected"
+    UNVERIFIED = "unverified"
+
+class ReportSummary(BaseModel):
+    total_files_changed: int
+    total_symbols_changed: int
+    total_affected_symbols: int
+    total_tests_run: int
+    regressions_count: int
+
+class GraphNode(BaseModel):
+    id: str
+    kind: str
+    file: str
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    kind: str
+
+class GraphData(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+class Report(BaseModel):
+    run_id: str
+    created_at: str
+    classification: Classification
+    summary: ReportSummary
+    ai_interpretation: AIInterpretation
+    file_diffs: list[FileDiff]
+    symbol_diffs: list[SymbolDiff]
+    blast_radius: BlastRadius
+    graph_data: GraphData
+    test_results: list[SymbolTestComparison]
+    evidence: list[Evidence]
 
 class Run(BaseModel):
     run_id: str

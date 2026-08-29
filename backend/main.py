@@ -1,14 +1,16 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import uuid
 import os
 import shutil
+import json
 from pathlib import Path
 from datetime import datetime, timezone
 
 import database
-from models import CreateRunResponse, Run, RunStatus
+from models import CreateRunResponse, Run, RunStatus, Report
 from brain.runner import run_pipeline
 
 DATA_DIR = Path(__file__).parent / "data" / "runs"
@@ -88,3 +90,15 @@ def get_run_endpoint(run_id: str):
         status=run_data["status"],
         error=run_data["error"]
     )
+
+@app.get("/api/runs/{run_id}/report", response_model=Report)
+def get_report_endpoint(run_id: str):
+    run_data = database.get_run(run_id)
+    if not run_data:
+        raise HTTPException(status_code=404, detail="Run not found")
+        
+    report_data = database.get_report(run_id)
+    if not report_data or not report_data.get("data"):
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    return JSONResponse(content=json.loads(report_data["data"]))

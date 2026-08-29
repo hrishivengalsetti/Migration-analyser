@@ -76,3 +76,39 @@ def get_run(run_id: str) -> Optional[dict]:
         return None
     finally:
         conn.close()
+
+def get_run_paths(run_id: str) -> tuple[str, str]:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT original_path, migrated_path FROM runs WHERE id = ?", (run_id,))
+        row = cursor.fetchone()
+        if not row or not row["original_path"] or not row["migrated_path"]:
+            raise ValueError(f"Run paths for run_id '{run_id}' not found.")
+        return row["original_path"], row["migrated_path"]
+    finally:
+        conn.close()
+
+def save_report(run_id: str, data: str, generated_at: str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO reports (run_id, data, generated_at) VALUES (?, ?, ?)",
+            (run_id, data, generated_at)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_report(run_id: str) -> Optional[dict]:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT run_id, data, generated_at FROM reports WHERE run_id = ?", (run_id,))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    finally:
+        conn.close()
