@@ -36,6 +36,14 @@ class SymbolDiff(BaseModel):
     line_original: Optional[int] = None
     line_migrated: Optional[int] = None
 
+class BlastRadius(BaseModel):
+    changed_symbols: list[str]
+    directly_affected: list[str]
+    transitively_affected: list[str]
+    all_affected: list[str]
+    cycles_detected: bool
+    total_affected_count: int
+
 class RunStatus(str, Enum):
     PENDING = "pending"
     ANALYZING = "analyzing"
