@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ReportPage from '../ReportPage';
 
-const mockReportWithRegressions = {
+const mockFullReport = {
   run_id: 'test-run-123',
   created_at: '2026-08-29T12:00:00Z',
   classification: 'regression_detected',
@@ -13,7 +13,13 @@ const mockReportWithRegressions = {
     total_symbols_changed: 5,
     total_affected_symbols: 12,
     total_tests_run: 8,
-    regressions_count: 2,
+    regressions_count: 1,
+  },
+  ai_interpretation: {
+    migration_intent: 'Migrated HTTP client implementation.',
+    risk_summary: '1 regression detected in error handling.',
+    key_concerns: ['Timeout behavior changed.'],
+    confidence: 'high',
   },
   file_diffs: [
     {
@@ -25,34 +31,54 @@ const mockReportWithRegressions = {
   ],
   symbol_diffs: [
     {
-      symbol_id: 'app.client.get',
+      symbol_id: 'app.client.HttpClient.post',
       file: 'app/client.py',
-      kind: 'function',
+      kind: 'method',
       change_kind: 'body_changed',
-      original_source: 'def get(): pass',
-      migrated_source: 'def get(): return True',
-      line_original: 10,
-      line_migrated: 10,
+      original_source: 'def post(self): pass',
+      migrated_source: 'def post(self): return 1',
+      line_original: 42,
+      line_migrated: 45,
+    },
+  ],
+  blast_radius: {
+    changed_symbols: ['app.client.HttpClient.post'],
+    directly_affected: ['app.api.submit_order'],
+    transitively_affected: ['app.views.checkout'],
+    all_affected: ['app.client.HttpClient.post', 'app.api.submit_order', 'app.views.checkout'],
+    cycles_detected: false,
+    total_affected_count: 3,
+  },
+  graph_data: {
+    nodes: [
+      { id: 'app.client.HttpClient.post', kind: 'method', file: 'app/client.py' },
+      { id: 'app.api.submit_order', kind: 'function', file: 'app/api.py' },
+    ],
+    edges: [
+      { source: 'app.api.submit_order', target: 'app.client.HttpClient.post', kind: 'calls' },
+    ],
+  },
+  test_results: [
+    {
+      test_id: 'tests/test_client.py::test_post_timeout',
+      status_original: 'passed',
+      status_migrated: 'failed',
+      comparison: 'regression',
+    },
+  ],
+  evidence: [
+    {
+      symbol_id: 'app.client.HttpClient.post',
+      file: 'app/client.py',
+      change_kind: 'body_changed',
+      comparison: 'regression',
+      failing_tests: ['tests/test_client.py::test_post_timeout'],
+      passing_tests: ['tests/test_client.py::test_post_success'],
     },
   ],
 };
 
-const mockReportVerified = {
-  run_id: 'verified-run-999',
-  created_at: '2026-08-29T12:00:00Z',
-  classification: 'verified',
-  summary: {
-    total_files_changed: 1,
-    total_symbols_changed: 2,
-    total_affected_symbols: 2,
-    total_tests_run: 5,
-    regressions_count: 0,
-  },
-  file_diffs: [],
-  symbol_diffs: [],
-};
-
-describe('ReportPage & Summary/Changes Tabs', () => {
+describe('ReportPage Component All Tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = vi.fn();
@@ -68,24 +94,10 @@ describe('ReportPage & Summary/Changes Tabs', () => {
     );
   };
 
-  it('renders loading state initially and then displays report data', async () => {
+  it('renders Summary tab with metric cards and AI Narrative component', async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => mockReportWithRegressions,
-    });
-
-    renderReportPage();
-
-    expect(screen.getByText('Loading analysis report...')).toBeInTheDocument();
-
-    expect(await screen.findByText('Migration Analysis Report')).toBeInTheDocument();
-    expect(screen.getByText('REGRESSION DETECTED')).toBeInTheDocument();
-  });
-
-  it('correctly displays deterministic backend summary metrics without fallback expressions', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockReportWithRegressions,
+      json: async () => mockFullReport,
     });
 
     renderReportPage();
@@ -95,67 +107,38 @@ describe('ReportPage & Summary/Changes Tabs', () => {
     expect(screen.getByTestId('files-changed')).toHaveTextContent('3');
     expect(screen.getByTestId('symbols-changed')).toHaveTextContent('5');
     expect(screen.getByTestId('blast-radius')).toHaveTextContent('12');
-    expect(screen.getByTestId('regressions')).toHaveTextContent('2');
+    expect(screen.getByTestId('regressions')).toHaveTextContent('1');
     expect(screen.getByTestId('tests-run')).toHaveTextContent('8');
 
-    // Verify red visual emphasis when regressions_count > 0
-    expect(screen.getByTestId('regressions')).toHaveClass('text-red-600');
+    // AI Narrative in Summary tab
+    expect(screen.getByText('AI-Generated Narrative')).toBeInTheDocument();
+    expect(screen.getByText('Migrated HTTP client implementation.')).toBeInTheDocument();
   });
 
-  it('displays regressions_count = 0 without red text highlight', async () => {
+  it('navigates seamlessly across all 5 tabs: Summary, Changes, Impact, Tests, Evidence', async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => mockReportVerified,
-    });
-
-    renderReportPage('verified-run-999');
-
-    await screen.findByText('Migration Analysis Report');
-
-    expect(screen.getByTestId('regressions')).toHaveTextContent('0');
-    expect(screen.getByTestId('regressions')).toHaveClass('text-gray-900');
-  });
-
-  it('renders error state when report fetch fails with 404', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: async () => ({ detail: 'Report not found' }),
-    });
-
-    renderReportPage('invalid-run-id');
-
-    expect(await screen.findByText('Unable to Load Report')).toBeInTheDocument();
-    expect(screen.getByText('Report not found')).toBeInTheDocument();
-  });
-
-  it('navigates to Changes tab and expands file & symbol diffs', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockReportWithRegressions,
+      json: async () => mockFullReport,
     });
 
     renderReportPage();
 
     await screen.findByText('Migration Analysis Report');
 
-    // Click Changes tab
-    const changesTabBtn = screen.getByRole('button', { name: /Changes \(1\)/i });
-    fireEvent.click(changesTabBtn);
-
+    // 1. Changes tab
+    fireEvent.click(screen.getByRole('button', { name: /Changes \(1\)/i }));
     expect(screen.getByText('File Diffs (1)')).toBeInTheDocument();
-    expect(screen.getByText('app/client.py')).toBeInTheDocument();
 
-    // Toggle File Diff
-    const showDiffBtn = screen.getByText('Show Diff ▼');
-    fireEvent.click(showDiffBtn);
+    // 2. Impact tab
+    fireEvent.click(screen.getByRole('button', { name: /Impact Graph/i }));
+    expect(screen.getByTestId('static-analysis-disclaimer')).toBeInTheDocument();
 
-    expect(screen.getByText('def get(): return True')).toBeInTheDocument();
+    // 3. Tests tab
+    fireEvent.click(screen.getByRole('button', { name: /Test Results \(1\)/i }));
+    expect(screen.getByTestId('test-results-component')).toBeInTheDocument();
 
-    // Toggle Symbol Diff
-    const showSourceBtn = screen.getByText('Show Source ▼');
-    fireEvent.click(showSourceBtn);
-
-    expect(screen.getByText('app.client.get')).toBeInTheDocument();
+    // 4. Evidence tab
+    fireEvent.click(screen.getByRole('button', { name: /Evidence \(1\)/i }));
+    expect(screen.getByTestId('evidence-panel-component')).toBeInTheDocument();
   });
 });

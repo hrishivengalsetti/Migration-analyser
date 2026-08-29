@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import ClassificationBadge from '../components/ClassificationBadge';
 import DiffViewer from '../components/DiffViewer';
 import GraphView from '../components/GraphView';
+import TestResults from '../components/TestResults';
+import EvidencePanel from '../components/EvidencePanel';
+import AINarrative from '../components/AINarrative';
 import { getReport } from '../api/client';
 
 export default function ReportPage() {
@@ -72,6 +75,8 @@ export default function ReportPage() {
   const summary = report.summary || {};
   const fileDiffs = report.file_diffs || [];
   const symbolDiffs = report.symbol_diffs || [];
+  const testResults = report.test_results || [];
+  const evidence = report.evidence || [];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
@@ -97,8 +102,8 @@ export default function ReportPage() {
               { id: 'summary', name: 'Summary' },
               { id: 'changes', name: `Changes (${fileDiffs.length})` },
               { id: 'impact', name: 'Impact Graph' },
-              { id: 'tests', name: 'Test Results' },
-              { id: 'evidence', name: 'Evidence' },
+              { id: 'tests', name: `Test Results (${testResults.length})` },
+              { id: 'evidence', name: `Evidence (${evidence.length})` },
             ].map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -183,6 +188,9 @@ export default function ReportPage() {
                 <p className="text-xs font-medium text-gray-500 mt-1">Tests Run</p>
               </div>
             </div>
+
+            {/* AI Narrative Component */}
+            <AINarrative interpretation={report.ai_interpretation} />
           </div>
         )}
 
@@ -301,13 +309,11 @@ export default function ReportPage() {
           <GraphView graphData={report.graph_data} blastRadius={report.blast_radius} />
         )}
 
-        {/* PLACEHOLDER TABS */}
-        {['tests', 'evidence'].includes(activeTab) && (
-          <div className="bg-white p-12 rounded-lg border border-gray-200 shadow-sm text-center">
-            <h3 className="text-lg font-bold text-gray-700 mb-2 capitalize">{activeTab} View</h3>
-            <p className="text-sm text-gray-500">Coming soon in upcoming tasks.</p>
-          </div>
-        )}
+        {/* TESTS TAB */}
+        {activeTab === 'tests' && <TestResults testResults={testResults} />}
+
+        {/* EVIDENCE TAB */}
+        {activeTab === 'evidence' && <EvidencePanel evidence={evidence} />}
       </main>
     </div>
   );
