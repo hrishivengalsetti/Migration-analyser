@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ClassificationBadge from '../components/ClassificationBadge';
 import DiffViewer from '../components/DiffViewer';
+import GraphView from '../components/GraphView';
 import { getReport } from '../api/client';
 
 export default function ReportPage() {
@@ -295,8 +296,13 @@ export default function ReportPage() {
           </div>
         )}
 
+        {/* IMPACT TAB */}
+        {activeTab === 'impact' && (
+          <GraphView graphData={report.graph_data} blastRadius={report.blast_radius} />
+        )}
+
         {/* PLACEHOLDER TABS */}
-        {['impact', 'tests', 'evidence'].includes(activeTab) && (
+        {['tests', 'evidence'].includes(activeTab) && (
           <div className="bg-white p-12 rounded-lg border border-gray-200 shadow-sm text-center">
             <h3 className="text-lg font-bold text-gray-700 mb-2 capitalize">{activeTab} View</h3>
             <p className="text-sm text-gray-500">Coming soon in upcoming tasks.</p>
