@@ -60,7 +60,7 @@ class ComparisonStatus(str, Enum):
     DELETED = "deleted"
     UNVERIFIED = "unverified"
 
-class TestResultComparison(BaseModel):
+class SymbolTestComparison(BaseModel):
     test_id: str                          # nodeid (e.g. "tests/test_api.py::test_login")
     status_original: Optional[str] = None # "passed" | "failed" | "error" | "skipped" | None
     status_migrated: Optional[str] = None # "passed" | "failed" | "error" | "skipped" | None
@@ -77,7 +77,16 @@ class BehavioralComparison(BaseModel):
     added_count: int
     deleted_count: int
     unverified_count: int
-    test_results: list[TestResultComparison]
+    test_results: list[SymbolTestComparison]
+
+class Evidence(BaseModel):
+    symbol_id: str                                 # e.g. "app.client.HttpClient.post" or "<unattributed>"
+    file: str                                      # relative file path or "unattributed"
+    change_kind: Optional[SymbolChangeKind] = None # "added" | "deleted" | "body_changed" | "signature_changed" | None
+    comparison: ComparisonStatus                   # "regression" | "fixed" | "unchanged" | "added" | "deleted" | "unverified"
+    failing_tests: list[str]                       # test nodeids that failed/errored in migrated
+    passing_tests: list[str]                       # test nodeids that passed in migrated
+    unverified_tests: list[str]                    # test nodeids that were unverified
 
 class Run(BaseModel):
     run_id: str
