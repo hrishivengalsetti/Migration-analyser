@@ -1,4 +1,5 @@
 import docker
+import requests
 import json
 import io
 import tarfile
