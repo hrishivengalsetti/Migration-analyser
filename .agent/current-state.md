@@ -20,6 +20,7 @@ Last updated: 2026-08-28
 - [x] TASK-003: Diff Analyzer — File-Level Diff & Brain Reorganization / Dockerization
 - [x] TASK-004: Diff Analyzer — AST Symbol Diff
 - [x] TASK-005: Dependency Graph Builder (NetworkX)
+- [x] TASK-006: Blast Radius Calculator
 
 ## What Is In Progress
 
@@ -31,7 +32,7 @@ Last updated: 2026-08-28
 
 ## Next Task to Assign
 
-**TASK-006**: Blast Radius Calculator
+**TASK-007**: Test Selector (AST Static Mapping)
 
 ## Known Blockers
 
