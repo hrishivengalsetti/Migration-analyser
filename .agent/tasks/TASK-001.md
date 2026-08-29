@@ -56,7 +56,7 @@ backend/
 
 ### AC-2: SQLite schema
 - Running the app creates a SQLite database file `backend/data/runs.db`
-- The database has a `runs` table with columns: `id` (TEXT PK), `created_at` (TEXT), `status` (TEXT), `error` (TEXT NULLABLE)
+- The database has a `runs` table with columns: `id` (TEXT PK), `created_at` (TEXT), `status` (TEXT), `original_path` (TEXT NULLABLE), `migrated_path` (TEXT NULLABLE), `error` (TEXT NULLABLE)
 - The database has a `reports` table with columns: `run_id` (TEXT PK, FK→runs.id), `data` (TEXT), `generated_at` (TEXT)
 
 ### AC-3: POST /api/runs endpoint

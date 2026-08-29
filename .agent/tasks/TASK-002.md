@@ -56,8 +56,9 @@ backend/
 - After saving files, `POST /api/runs` fires a FastAPI `BackgroundTask` calling `run_pipeline(run_id)`
 - The endpoint returns `{"run_id": ..., "status": "pending"}` immediately (does not wait for pipeline)
 
-### AC-3: Pipeline runner stub
+### AC-3: Pipeline runner stub & Global Error Handler
 - `backend/pipeline/runner.py` contains `run_pipeline(run_id: str)` function
+- The execution is wrapped in a top-level `try/except Exception as e` block. On exception, it calls `update_run_status(run_id, "failed", str(e))`.
 - The stub:
   1. Updates run status to `"analyzing"` in SQLite
   2. Sleeps 1 second (simulating work)

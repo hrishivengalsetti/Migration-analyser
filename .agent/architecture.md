@@ -4,31 +4,38 @@
 
 ```
 hackathon/
-├── .agent/                  ← Project memory (this directory)
+├── .agent/                  ← Project memory & governance
 ├── backend/                 ← Python + FastAPI
-│   ├── main.py
-│   ├── models.py            ← Pydantic models + SQLite schema
-│   ├── database.py          ← SQLite connection + queries
+│   ├── main.py              ← FastAPI app, CORS, routers, lifespan
+│   ├── models.py            ← Pydantic models + SQLite schemas / enums
+│   ├── database.py          ← SQLite connection + queries (raw sqlite3)
 │   ├── pipeline/
 │   │   ├── __init__.py
-│   │   ├── runner.py        ← Pipeline orchestrator (BackgroundTask)
+│   │   ├── runner.py        ← Pipeline orchestrator (BackgroundTask + try/except)
 │   │   ├── diff_analyzer.py ← File + AST symbol diff
 │   │   ├── graph_builder.py ← NetworkX graph from ast
-│   │   ├── blast_radius.py  ← Graph reachability
-│   │   ├── test_selector.py ← Symbol-to-test mapping
+│   │   ├── blast_radius.py  ← Graph reachability (nx.ancestors)
+│   │   ├── test_selector.py ← Symbol-to-test mapping (ast + pytest collection)
 │   │   ├── sandbox.py       ← Docker SDK execution
 │   │   ├── comparator.py    ← Deterministic result comparison
 │   │   ├── evidence.py      ← Evidence assembly
-│   │   ├── interpreter.py   ← Gemini Flash LLM call
+│   │   ├── interpreter.py   ← Gemini Flash LLM call (via google-generativeai)
 │   │   └── report.py        ← Report assembly + classification
+│   ├── prompts/
+│   │   └── interpreter.txt  ← Version-controlled LLM prompt template
+│   ├── data/                ← SQLite db + file storage per run
 │   ├── requirements.txt
 │   └── tests/
+│       ├── test_api.py
+│       ├── test_runner.py
 │       ├── test_diff_analyzer.py
 │       ├── test_graph_builder.py
 │       ├── test_blast_radius.py
 │       ├── test_test_selector.py
 │       ├── test_sandbox.py
 │       ├── test_comparator.py
+│       ├── test_evidence.py
+│       ├── test_interpreter.py
 │       └── test_integration.py
 ├── frontend/                ← React + Vite + JS + Tailwind + shadcn
 │   ├── src/
@@ -52,57 +59,83 @@ hackathon/
 │   ├── original/            ← Demo migration: original Python project
 │   ├── migrated/            ← Demo migration: migrated Python project (with regression)
 │   └── README.md
+├── architecture-revised.md  ← Historical reference doc (retained for context)
 └── README.md
 ```
 
 ---
 
-## Backend: Python + FastAPI
+## 1. Precise Problem Statement & Scope
+
+**Problem**: Migrations introduce silent behavioral regressions.  
+**System Question**: *"Given a legacy codebase and a migrated codebase, what changed, what could break, and do we have deterministic evidence that critical paths still behave equivalently?"*
+
+### MVP Scope (Aggressively Scoped)
+
+| Feature / Area | In Scope | Excluded from MVP |
+|---|---|---|
+| **Input** | Zip uploads (`original.zip`, `migrated.zip`) via `multipart/form-data` | Direct filesystem paths, Git repos, streaming tarballs |
+| **Language** | **Python only** | Multi-language, cross-language bridges |
+| **Parsing** | Python `ast` stdlib | Tree-sitter, libcst, C extensions |
+| **Diff** | File-level diff + AST symbol diff | Line/hunk diffs, syntax-tree tree-diffs |
+| **Dependency Graph** | Intra-project NetworkX graph (import + call edges) | Third-party dependency traversal, dynamic call graphs |
+| **Blast Radius** | Transitive call/import reachability (`nx.ancestors`) | Dynamic tracing, impact probability scoring |
+| **Test Selection** | Static mapping of `pytest` tests to changed symbols | Dynamic coverage, AI test generation |
+| **Execution Sandbox** | Docker container (`python-test-runner`), read-only bind mounts, `--network none`, `--memory 512m` | Bare host execution, virtualenv isolation, gVisor |
+| **Comparison** | Deterministic result comparison (pass/fail, stdout, exit codes) | Fuzzy AI output matching |
+| **AI Role** | Single call to Google Gemini Flash for narrative interpretation | Primary evidence generation, automated fixes, test writing |
+| **UI** | React single-page application (Upload page + Report viewer) | Multi-user authentication, persistent team workspaces |
+
+---
+
+## 2. Backend Architecture: Python + FastAPI
 
 ### API Endpoints
 
 ```
 POST /api/runs
-  Body: multipart/form-data { original: <zip>, migrated: <zip> }
-  Response: { run_id: UUID, status: "pending" }
+  Body: multipart/form-data { original: <zip file>, migrated: <zip file> }
+  Response: { run_id: UUID (string), status: "pending" }
 
 GET /api/runs/{run_id}
-  Response: { run_id, status, created_at, error? }
+  Response: { run_id: str, status: RunStatus, created_at: str, error: Optional[str] }
 
 GET /api/runs/{run_id}/report
-  Response: Report (full structured JSON)
+  Response: Report (Full structured JSON object)
 ```
 
-### Pipeline Execution
+### Pipeline Execution & Worker Resilience
 
-- `POST /api/runs` creates a Run record in SQLite and fires a `BackgroundTask`
-- The BackgroundTask runs the full pipeline sequentially
-- Status is updated at each step in SQLite
-- Frontend polls `GET /api/runs/{run_id}` until status == "complete" or "failed"
+1. `POST /api/runs` validates uploaded zip files, saves them to disk (`backend/data/runs/{run_id}/original.zip` and `migrated.zip`), creates a `Run` record with status `"pending"`, and dispatches a FastAPI `BackgroundTask` for `run_pipeline(run_id)`.
+2. `run_pipeline` in `backend/pipeline/runner.py` **MUST** wrap the entire execution in a global `try/except Exception as e` block.
+3. On any failure, `update_run_status(run_id, "failed", str(e))` is called to ensure the database record reflects the error and prevents infinite polling by the frontend.
+4. On success, run status progresses through: `"pending"` → `"analyzing"` → `"executing"` → `"interpreting"` → `"complete"`.
 
-### Pipeline Steps (in order)
+### Pipeline Steps (Sequential Execution)
 
-1. **DiffAnalyzer** → `[FileDiff]`, `[SymbolDiff]`
-2. **GraphBuilder** → `CodeGraph` (original), `CodeGraph` (migrated)
-3. **BlastRadius** → `BlastRadius`
-4. **TestSelector** → `{symbol_id: [test_id]}`
-5. **SandboxExecutor** → `[TestResult]` × 2
-6. **Comparator** → `{test_id: comparison}`
-7. **EvidenceCollector** → `[Evidence]`
-8. **Interpreter** → `AIInterpretation` (1 Gemini Flash call)
-9. **ReportAssembler** → `Report` (classification is deterministic)
+1. **DiffAnalyzer** (`diff_analyzer.py`): Computes file status (ADDED, DELETED, MODIFIED) and AST symbol diffs (`SymbolDiff`).
+2. **GraphBuilder** (`graph_builder.py`): Builds intra-project NetworkX directed call/import graphs for original and migrated codebases.
+3. **BlastRadius** (`blast_radius.py`): Calculates direct and transitive reachability from changed symbols using `nx.ancestors()`.
+4. **TestSelector** (`test_selector.py`): Maps `pytest` test functions to changed and affected symbols using AST static analysis.
+5. **SandboxExecutor** (`sandbox.py`): Runs `pytest` with `pytest-json-report` in isolated Docker containers for both original and migrated code.
+6. **Comparator** (`comparator.py`): Compares test results deterministically (passed, failed, regressed, improved).
+7. **EvidenceCollector** (`evidence.py`): Assembles per-symbol evidence cards linking diffs, blast radius, and test execution results.
+8. **Interpreter** (`interpreter.py`): Invokes Google Gemini Flash (`google-generativeai` SDK) exactly once per run to generate migration intent, risk summary, and key concerns. Falls back gracefully if `GEMINI_API_KEY` is not set.
+9. **ReportAssembler** (`report.py`): Assembles full structured `Report` JSON and computes final deterministic classification.
 
 ---
 
-## Database: SQLite
+## 3. Data Model & Database (SQLite + JSON)
 
-### Schema
+### Database: SQLite (`sqlite3` stdlib, no ORM)
+
+Located at `backend/data/runs.db`.
 
 ```sql
 CREATE TABLE runs (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
-    status TEXT NOT NULL,
+    status TEXT NOT NULL,      -- "pending", "analyzing", "executing", "interpreting", "complete", "failed"
     original_path TEXT,
     migrated_path TEXT,
     error TEXT
@@ -110,175 +143,102 @@ CREATE TABLE runs (
 
 CREATE TABLE reports (
     run_id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,   -- JSON blob of the full Report
+    data TEXT NOT NULL,        -- Full JSON blob of the Report model
     generated_at TEXT NOT NULL,
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );
 ```
 
-The report is stored as a JSON blob. No complex relational schema needed for MVP.
-The code graph is stored as a JSON file on disk: `runs/{run_id}/graph_original.json`, `runs/{run_id}/graph_migrated.json`.
+### File-Based Persistence
 
----
+- NetworkX Code Graphs: Saved as JSON per run at `backend/data/runs/{run_id}/graph_original.json` and `graph_migrated.json` using `nx.node_link_data()`.
+- Unzipped Codebases: Extracted to `backend/data/runs/{run_id}/original/` and `backend/data/runs/{run_id}/migrated/`.
 
-## Graph: NetworkX
-
-### Node Types
+### Core Data Models (Pydantic v2)
 
 ```python
-# Node attributes
-{
-    "id": "mymodule.MyClass.my_method",
-    "kind": "function",      # or "class", "module"
-    "file": "mymodule/utils.py",
-    "line_start": 42,
-    "line_end": 58,
-    "version": "original"   # or "migrated"
-}
-```
+class RunStatus(str, Enum):
+    PENDING = "pending"
+    ANALYZING = "analyzing"
+    EXECUTING = "executing"
+    INTERPRETING = "interpreting"
+    COMPLETE = "complete"
+    FAILED = "failed"
 
-### Edge Types
+class Run(BaseModel):
+    run_id: str
+    status: RunStatus
+    created_at: str
+    error: Optional[str] = None
 
-```python
-# Edge attributes
-{
-    "kind": "calls",    # or "imports"
-    "line": 45
-}
-```
+class FileStatus(str, Enum):
+    ADDED = "added"
+    DELETED = "deleted"
+    MODIFIED = "modified"
+    UNCHANGED = "unchanged"
 
-### Blast Radius Algorithm
+class FileDiff(BaseModel):
+    file: str
+    status: FileStatus
+    original_content: Optional[str] = None
+    migrated_content: Optional[str] = None
 
-```python
-import networkx as nx
+class SymbolKind(str, Enum):
+    FUNCTION = "function"
+    CLASS = "class"
+    METHOD = "method"
+    MODULE = "module"
 
-def compute_blast_radius(graph: nx.DiGraph, changed_symbols: list[str]) -> BlastRadius:
-    """
-    For each changed symbol, find all symbols that could be affected.
-    'Affected' = nodes that have a path TO the changed symbol (callers).
-    Uses NetworkX ancestors() which finds all nodes with a path to the given node.
-    """
-    directly_affected = set()
-    transitively_affected = set()
+class SymbolChangeKind(str, Enum):
+    ADDED = "added"
+    DELETED = "deleted"
+    BODY_CHANGED = "body_changed"
+    SIGNATURE_CHANGED = "signature_changed"
 
-    for sym in changed_symbols:
-        if sym not in graph:
-            continue
-        # Who calls this changed symbol? (ancestors in call graph)
-        ancestors = nx.ancestors(graph, sym)
-        for a in ancestors:
-            # 1-hop neighbors
-            if sym in graph.successors(a) or a in graph.successors(sym):
-                directly_affected.add(a)
-            else:
-                transitively_affected.add(a)
+class SymbolDiff(BaseModel):
+    symbol_id: str  # e.g., "mypackage.module.ClassName.method_name"
+    file: str
+    kind: SymbolKind
+    change_kind: SymbolChangeKind
+    original_source: Optional[str] = None
+    migrated_source: Optional[str] = None
+    line_original: Optional[int] = None
+    line_migrated: Optional[int] = None
 
-    cycles = not nx.is_directed_acyclic_graph(graph)
-    return BlastRadius(
-        changed_symbols=changed_symbols,
-        directly_affected=list(directly_affected),
-        transitively_affected=list(transitively_affected),
-        cycles_detected=cycles
-    )
-```
+class BlastRadius(BaseModel):
+    changed_symbols: list[str]
+    directly_affected: list[str]
+    transitively_affected: list[str]
+    all_affected: list[str]
+    cycles_detected: bool
+    total_affected_count: int
 
----
+class Evidence(BaseModel):
+    symbol_id: str
+    file: str
+    change_kind: Optional[SymbolChangeKind] = None
+    comparison: str  # "verified", "regression", "improved", "no_tests"
+    failing_tests: list[str] = []
+    passing_tests: list[str] = []
 
-## Sandbox: Docker
+class AIInterpretation(BaseModel):
+    migration_intent: str
+    risk_summary: str
+    key_concerns: list[str]
+    confidence: str
 
-### Image
-
-```dockerfile
-# docker/test-runner/Dockerfile
-FROM python:3.11-slim
-RUN pip install --no-cache-dir pytest pytest-json-report
-WORKDIR /workspace
-USER nobody
-```
-
-### Execution
-
-```python
-import docker
-
-client = docker.from_env()
-
-result = client.containers.run(
-    image="migration-verifier-runner:latest",
-    command=["pytest", "/workspace", "--json-report", "--json-report-file=/tmp/results.json", "-q"],
-    volumes={str(code_path): {"bind": "/workspace", "mode": "ro"}},
-    network_disabled=True,
-    mem_limit="512m",
-    nano_cpus=1_000_000_000,  # 1 CPU
-    pids_limit=100,
-    remove=True,
-    stdout=True,
-    stderr=True,
-)
+class Classification(str, Enum):
+    VERIFIED = "verified"
+    PARTIALLY_VERIFIED = "partially_verified"
+    REGRESSION_DETECTED = "regression_detected"
+    UNVERIFIED = "unverified"
 ```
 
 ---
 
-## AI: Gemini Flash
+## 4. Classification Logic (Deterministic)
 
-### When
-
-Once per run, after all evidence is collected.
-
-### What It Receives
-
-```json
-{
-  "changed_files": [...],
-  "changed_symbols": [...],
-  "blast_radius_size": 14,
-  "evidence": [
-    {
-      "symbol_id": "api.client.fetch_data",
-      "comparison": "regression",
-      "failing_tests": ["test_api.test_fetch_data_encoding"]
-    }
-  ],
-  "regressions": 2,
-  "classification": "regression_detected"
-}
-```
-
-### What It Returns
-
-```json
-{
-  "migration_intent": "...",
-  "risk_summary": "...",
-  "key_concerns": ["...", "..."],
-  "confidence": "high"
-}
-```
-
-### Prompt Location
-
-`backend/pipeline/prompts/interpreter.txt` — version controlled, not embedded in code.
-
----
-
-## Frontend: React + Vite + JS + Tailwind + shadcn
-
-### Pages
-
-1. **Upload Page** (`/`) — Two zip file inputs + "Analyze" button + status polling
-2. **Report Page** (`/report/:runId`) — Tabbed report viewer
-
-### Report Tabs
-
-1. **Summary** — Classification badge, counts, AI narrative
-2. **Changes** — File diff + symbol diff viewer
-3. **Impact** — React Flow graph of blast radius
-4. **Tests** — Test results table (original vs migrated comparison)
-5. **Evidence** — Per-symbol evidence cards
-
----
-
-## Classification Logic (Deterministic)
+The overall migration classification is strictly deterministic and computed directly from collected evidence and test execution counts:
 
 ```python
 def classify(evidence: list[Evidence], tests_run: int) -> Classification:
@@ -286,33 +246,65 @@ def classify(evidence: list[Evidence], tests_run: int) -> Classification:
     no_tests = sum(1 for e in evidence if e.comparison == "no_tests")
 
     if regressions > 0:
-        return "regression_detected"
+        return Classification.REGRESSION_DETECTED
     elif tests_run == 0 or no_tests == len(evidence):
-        return "unverified"
+        return Classification.UNVERIFIED
     elif no_tests > 0:
-        return "partially_verified"
+        return Classification.PARTIALLY_VERIFIED
     else:
-        return "verified"
+        return Classification.VERIFIED
 ```
 
-AI does **not** influence this classification. AI only narrates it.
+*Note: AI interpretation NEVER overrides or modifies this classification.*
 
 ---
 
-## Key Technology Decisions Log
+## 5. Code Graph & Blast Radius Engine (NetworkX)
 
-| Decision | Choice | Reason |
-|---|---|---|
-| Parsing | Python `ast` stdlib | Python-only MVP; no FFI overhead |
-| Graph engine | NetworkX | Sufficient for demo scale; no graph DB needed |
-| Graph persistence | JSON file per run | Simple, inspectable |
-| Run state | SQLite | Single-user; no hosted DB needed |
-| Sandbox | Docker (pre-built image) | Required; Option A for simplicity |
-| LLM | Google Gemini Flash | Free tier, hackathon-friendly |
-| Frontend | React + Vite + JS + Tailwind + shadcn | Justified by report complexity |
-| Graph viz | React Flow | Pre-built, visually impressive |
-| Code submission | Zip upload | Better UX for potential remote demo |
-| Demo migration | Purpose-built project | Full control; demo always works |
-| TypeScript | Dropped for MVP | Reduces friction; JS is sufficient |
-| Tree-sitter | Dropped for MVP | Overkill; `ast` handles Python |
-| Test generation | Dropped from MVP | Unreliable; doesn't add demo credibility |
+- **Nodes**: Symbols with ID `<module>.<symbol>`, attributes: `kind`, `file`, `line_start`, `line_end`.
+- **Edges**: `kind="imports"` or `kind="calls"`.
+- **Reachability Algorithm**: `nx.ancestors(G, target_symbol)` finds all upstream caller/importer nodes that have a directed path to `target_symbol`.
+- **Disclaimer**: Static AST resolution cannot handle Python's dynamic dispatch or `getattr()`. The UI displays an explicit disclaimer noting static analysis boundaries.
+
+---
+
+## 6. Sandboxed Execution (Docker)
+
+- **Image**: Pre-built Docker image `migration-verifier-runner:latest` (built from `docker/test-runner/Dockerfile`).
+- **Container Configuration**:
+  - Read-only bind mounts: `/workspace` bound to `code_path` (`mode: "ro"`).
+  - Security / Resource Limits: `network_disabled=True`, `mem_limit="512m"`, `nano_cpus=1_000_000_000`, `pids_limit=100`, `user="nobody"`.
+  - Execution Command: `pytest /workspace --json-report --json-report-file=/tmp/results.json -q`
+  - Output Capture: Parsed JSON report from container + stdout/stderr/exit code.
+
+---
+
+## 7. AI Interpretation (Google Gemini Flash)
+
+- **SDK**: `google-generativeai`
+- **Trigger**: Single API call per run at the end of evidence collection.
+- **Input**: Summary JSON containing changed files, changed symbols, blast radius size, regressions count, and evidence summary.
+- **Prompt**: Loaded from `backend/prompts/interpreter.txt`.
+- **Fallback**: If `GEMINI_API_KEY` is missing or the call fails, populate `AIInterpretation` with default "AI interpretation unavailable" fallback fields without crashing the pipeline.
+
+---
+
+## 8. Frontend Architecture: React + Vite + JS + Tailwind + shadcn
+
+- **Stack**: Vite + React (JavaScript) + Tailwind CSS + shadcn/ui primitives.
+- **Graph Visualizer**: React Flow for node-edge blast radius diagrams.
+- **Pages**:
+  1. `UploadPage.jsx`: Drag-and-drop zip file inputs for `original.zip` and `migrated.zip`, trigger submit, and display polling status progress bar.
+  2. `ReportPage.jsx`: Tabbed report viewer displaying:
+     - **Summary Tab**: Classification status badge, execution summary, AI narrative card.
+     - **Changes Tab**: Side-by-side file and symbol diffs.
+     - **Impact Tab**: Interactive React Flow blast radius node graph.
+     - **Tests Tab**: Table of pytest results comparing original vs migrated runs.
+     - **Evidence Tab**: Per-symbol evidence cards showing pass/fail status and test links.
+
+---
+
+## 9. Historical Notes & Retained Decisions
+
+- `architecture-revised.md` is retained in the repository root for historical reference regarding initial planning and decision evolution. `.agent/architecture.md` remains the authoritative live reference.
+- Tree-sitter, multi-language support, graph databases (Neo4j), dynamic test generation, and TypeScript were explicitly evaluated and rejected for MVP complexity control (see ADR-001 through ADR-011 in `decisions.md`).
