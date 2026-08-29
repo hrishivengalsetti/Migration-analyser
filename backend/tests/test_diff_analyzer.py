@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from pipeline.diff_analyzer import analyze_file_diff
-from models import FileStatus
+from brain.diff_analyzer import analyze_file_diff, analyze_symbol_diff
+from models import FileStatus, SymbolKind, SymbolChangeKind
 
 def test_detects_added_file(tmp_path: Path):
     original_dir = tmp_path / "original"
@@ -110,3 +110,122 @@ def test_relative_paths(tmp_path: Path):
     diffs = analyze_file_diff(original_dir, migrated_dir)
     assert len(diffs) == 1
     assert diffs[0].file == "app/utils/helpers.py"
+
+def test_symbol_diff_detects_added_function(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    (original_dir / "mod.py").write_text("")
+    (migrated_dir / "mod.py").write_text("def new_func():\n    pass")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    assert len(sym_diffs) == 1
+    assert sym_diffs[0].symbol_id == "mod.new_func"
+    assert sym_diffs[0].kind == SymbolKind.FUNCTION
+    assert sym_diffs[0].change_kind == SymbolChangeKind.ADDED
+
+def test_symbol_diff_detects_deleted_function(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    (original_dir / "mod.py").write_text("def old_func():\n    pass")
+    (migrated_dir / "mod.py").write_text("")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    assert len(sym_diffs) == 1
+    assert sym_diffs[0].symbol_id == "mod.old_func"
+    assert sym_diffs[0].kind == SymbolKind.FUNCTION
+    assert sym_diffs[0].change_kind == SymbolChangeKind.DELETED
+
+def test_symbol_diff_detects_body_change(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    (original_dir / "mod.py").write_text("def calc(x):\n    return x + 1")
+    (migrated_dir / "mod.py").write_text("def calc(x):\n    return x + 2")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    assert len(sym_diffs) == 1
+    assert sym_diffs[0].symbol_id == "mod.calc"
+    assert sym_diffs[0].kind == SymbolKind.FUNCTION
+    assert sym_diffs[0].change_kind == SymbolChangeKind.BODY_CHANGED
+
+def test_symbol_diff_detects_signature_change(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    (original_dir / "mod.py").write_text("def calc(x):\n    return x + 1")
+    (migrated_dir / "mod.py").write_text("def calc(x, y=1):\n    return x + y")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    assert len(sym_diffs) == 1
+    assert sym_diffs[0].symbol_id == "mod.calc"
+    assert sym_diffs[0].kind == SymbolKind.FUNCTION
+    assert sym_diffs[0].change_kind == SymbolChangeKind.SIGNATURE_CHANGED
+
+def test_symbol_diff_detects_method_change(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    (original_dir / "mod.py").write_text("class MyClass:\n    def run(self):\n        return 1")
+    (migrated_dir / "mod.py").write_text("class MyClass:\n    def run(self):\n        return 2")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    # Both class and method body will change
+    method_diffs = [s for s in sym_diffs if s.kind == SymbolKind.METHOD]
+    assert len(method_diffs) == 1
+    assert method_diffs[0].symbol_id == "mod.MyClass.run"
+    assert method_diffs[0].change_kind == SymbolChangeKind.BODY_CHANGED
+
+def test_symbol_diff_ignores_unchanged_symbol(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    (original_dir / "mod.py").write_text("def same():\n    pass\ndef changed():\n    return 1")
+    (migrated_dir / "mod.py").write_text("def same():\n    pass\ndef changed():\n    return 2")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    assert len(sym_diffs) == 1
+    assert sym_diffs[0].symbol_id == "mod.changed"
+
+def test_symbol_id_format(tmp_path: Path):
+    original_dir = tmp_path / "original"
+    migrated_dir = tmp_path / "migrated"
+    original_dir.mkdir()
+    migrated_dir.mkdir()
+    
+    pkg_dir = migrated_dir / "mypackage" / "utils"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "helpers.py").write_text("class Helper:\n    def do_work(self):\n        pass")
+    
+    file_diffs = analyze_file_diff(original_dir, migrated_dir)
+    sym_diffs = analyze_symbol_diff(file_diffs, original_dir, migrated_dir)
+    
+    ids = {s.symbol_id for s in sym_diffs}
+    assert "mypackage.utils.helpers.Helper" in ids
+    assert "mypackage.utils.helpers.Helper.do_work" in ids
+

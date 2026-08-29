@@ -15,6 +15,27 @@ class FileDiff(BaseModel):
     original_content: Optional[str] = None   # None if added
     migrated_content: Optional[str] = None   # None if deleted
 
+class SymbolKind(str, Enum):
+    FUNCTION = "function"
+    CLASS = "class"
+    METHOD = "method"
+
+class SymbolChangeKind(str, Enum):
+    ADDED = "added"
+    DELETED = "deleted"
+    BODY_CHANGED = "body_changed"
+    SIGNATURE_CHANGED = "signature_changed"
+
+class SymbolDiff(BaseModel):
+    symbol_id: str              # e.g. "mymodule.MyClass.my_method"
+    file: str                   # relative path
+    kind: SymbolKind
+    change_kind: SymbolChangeKind
+    original_source: Optional[str] = None
+    migrated_source: Optional[str] = None
+    line_original: Optional[int] = None
+    line_migrated: Optional[int] = None
+
 class RunStatus(str, Enum):
     PENDING = "pending"
     ANALYZING = "analyzing"

@@ -17,7 +17,8 @@ Last updated: 2026-08-28
 - [x] Skills written
 - [x] TASK-001: Backend project scaffold (FastAPI + SQLite + run CRUD)
 - [x] TASK-002: Pipeline Runner Stub + File Storage + BackgroundTask Wiring
-- [x] TASK-003: Diff Analyzer — File-Level Diff
+- [x] TASK-003: Diff Analyzer — File-Level Diff & Brain Reorganization / Dockerization
+- [x] TASK-004: Diff Analyzer — AST Symbol Diff
 
 ## What Is In Progress
 
@@ -29,7 +30,7 @@ Last updated: 2026-08-28
 
 ## Next Task to Assign
 
-**TASK-004**: Diff Analyzer — AST Symbol Diff
+**TASK-005**: Dependency Graph Builder (NetworkX)
 
 ## Known Blockers
 
