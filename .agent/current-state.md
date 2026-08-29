@@ -15,6 +15,7 @@ Last updated: 2026-08-28
 - [x] Task graph defined (`.agent/task-graph.json`)
 - [x] First task wave written (TASK-001 through TASK-005)
 - [x] Skills written
+- [x] TASK-001: Backend project scaffold (FastAPI + SQLite + run CRUD)
 
 ## What Is In Progress
 
@@ -26,7 +27,7 @@ Last updated: 2026-08-28
 
 ## Next Task to Assign
 
-**TASK-001**: Backend project scaffold (FastAPI + SQLite + run CRUD)
+**TASK-002**: Pipeline Runner Stub + File Storage + BackgroundTask Wiring
 
 ## Known Blockers
 
