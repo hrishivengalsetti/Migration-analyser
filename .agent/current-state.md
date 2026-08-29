@@ -19,6 +19,7 @@ Last updated: 2026-08-28
 - [x] TASK-002: Pipeline Runner Stub + File Storage + BackgroundTask Wiring
 - [x] TASK-003: Diff Analyzer — File-Level Diff & Brain Reorganization / Dockerization
 - [x] TASK-004: Diff Analyzer — AST Symbol Diff
+- [x] TASK-005: Dependency Graph Builder (NetworkX)
 
 ## What Is In Progress
 
@@ -30,7 +31,7 @@ Last updated: 2026-08-28
 
 ## Next Task to Assign
 
-**TASK-005**: Dependency Graph Builder (NetworkX)
+**TASK-006**: Blast Radius Calculator
 
 ## Known Blockers
 
