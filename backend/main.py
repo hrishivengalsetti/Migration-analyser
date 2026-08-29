@@ -1,11 +1,17 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uuid
+import os
+import shutil
+from pathlib import Path
 from datetime import datetime, timezone
 
 import database
 from models import CreateRunResponse, Run, RunStatus
+from pipeline.runner import run_pipeline
+
+DATA_DIR = Path(__file__).parent / "data" / "runs"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +36,7 @@ def health_check():
 
 @app.post("/api/runs", response_model=CreateRunResponse)
 async def create_run_endpoint(
+    background_tasks: BackgroundTasks,
     original: UploadFile = File(...),
     migrated: UploadFile = File(...)
 ):
@@ -40,9 +47,33 @@ async def create_run_endpoint(
     created_at = datetime.now(timezone.utc).isoformat()
     status = RunStatus.PENDING.value
     
-    database.create_run(run_id, created_at, status)
+    # Save files to disk
+    run_dir = DATA_DIR / run_id
+    os.makedirs(run_dir, exist_ok=True)
     
-    # Returning the response without firing a background task (that is TASK-002)
+    original_path = run_dir / "original.zip"
+    with open(original_path, "wb") as buffer:
+        shutil.copyfileobj(original.file, buffer)
+        
+    migrated_path = run_dir / "migrated.zip"
+    with open(migrated_path, "wb") as buffer:
+        shutil.copyfileobj(migrated.file, buffer)
+    
+    # Store paths in database
+    conn = database.get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO runs (id, created_at, status, original_path, migrated_path) VALUES (?, ?, ?, ?, ?)",
+            (run_id, created_at, status, str(original_path), str(migrated_path))
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    
+    # Trigger background pipeline
+    background_tasks.add_task(run_pipeline, run_id)
+    
     return CreateRunResponse(run_id=run_id, status=status)
 
 @app.get("/api/runs/{run_id}", response_model=Run)

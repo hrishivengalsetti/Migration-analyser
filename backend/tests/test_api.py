@@ -43,7 +43,8 @@ def test_create_run_success():
     assert get_response.status_code == 200
     get_data = get_response.json()
     assert get_data["run_id"] == run_id
-    assert get_data["status"] == "pending"
+    # TestClient runs background tasks synchronously, so it will actually be complete
+    assert get_data["status"] == "complete"
     assert "created_at" in get_data
     assert get_data["error"] is None
 

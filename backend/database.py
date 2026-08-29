@@ -53,6 +53,18 @@ def create_run(run_id: str, created_at: str, status: str):
 
 from typing import Optional
 
+def update_run_status(run_id: str, status: str, error: Optional[str] = None):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE runs SET status = ?, error = ? WHERE id = ?",
+            (status, error, run_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
 def get_run(run_id: str) -> Optional[dict]:
     conn = get_db_connection()
     try:
