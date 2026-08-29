@@ -23,7 +23,7 @@ Last updated: 2026-08-28
 
 ## What Is In Progress
 
-- Nothing. Awaiting first LatentCode task assignment.
+- Nothing. Awaiting next task assignment.
 
 ## What Remains
 
