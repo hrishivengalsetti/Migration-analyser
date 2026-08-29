@@ -121,9 +121,14 @@ def run_tests_in_sandbox(code_path: str, test_nodeids: list[str] | None = None, 
         if "No such image" in str(e):
             raise RuntimeError("Docker image 'migration-verifier-runner' not found.") from e
         raise
-    except requests.exceptions.ReadTimeout: # timeout from container.wait
-        if container:
-            container.kill()
+    except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError) as e:
+        # Docker SDK / requests wraps urllib3.exceptions.ReadTimeoutError inside ConnectionError
+        is_timeout = isinstance(e, requests.exceptions.ReadTimeout) or "Read timed out" in str(e) or "ReadTimeoutError" in str(e)
+        if is_timeout and container:
+            try:
+                container.kill()
+            except Exception:
+                pass
             stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
             stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
             return {
