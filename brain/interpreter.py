@@ -25,6 +25,10 @@ def generate_narrative(
 
     try:
         client = Groq(api_key=api_key, timeout=30.0)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Groq Client Base URL: {client.base_url}")
+        
         response = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": "You are a senior principal engineer reviewing a codebase migration. You provide concise, factual JSON summaries."},
@@ -41,11 +45,29 @@ def generate_narrative(
         data = json.loads(content)
         return AIInterpretation(**data)
         
-    except (APIError, APIConnectionError, APITimeoutError):
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        status_code = getattr(e, 'status_code', 'N/A')
+        response_body = getattr(e, 'response', 'N/A')
+        if hasattr(response_body, 'text'):
+            response_body = response_body.text
+        
+        logger.error(f"Groq API Error: {type(e).__name__} - {str(e)}")
+        logger.error(f"Status Code: {status_code}")
+        logger.error(f"Response Body: {response_body}")
+        
         return fallback
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"JSON Parse/Value Error: {e}")
         return fallback
-    except Exception:
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected Error in generate_narrative: {e}")
         return fallback
 
 

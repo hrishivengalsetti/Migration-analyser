@@ -39,4 +39,4 @@ def test_pipeline_saves_report():
     # Verify report API endpoint returns 200 and valid JSON
     report_resp = client.get(f"/api/runs/{run_id}/report")
     assert report_resp.status_code == 200
-    assert "report" in report_resp.json()
+    assert "summary" in report_resp.json()

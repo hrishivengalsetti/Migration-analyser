@@ -62,7 +62,7 @@ def build_graph(codebase_dir: Path) -> nx.DiGraph:
         )
 
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 sym_id = f"{module_name}.{node.name}" if module_name else node.name
                 G.add_node(
                     sym_id,
@@ -81,7 +81,7 @@ def build_graph(codebase_dir: Path) -> nx.DiGraph:
                     line_start=node.lineno
                 )
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         method_id = f"{class_id}.{item.name}"
                         G.add_node(
                             method_id,
@@ -148,13 +148,13 @@ def build_graph(codebase_dir: Path) -> nx.DiGraph:
                     G.add_edge(scope_id, target_id, kind="calls")
 
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 sym_id = f"{module_name}.{node.name}" if module_name else node.name
                 process_scope(node, sym_id)
             elif isinstance(node, ast.ClassDef):
                 class_id = f"{module_name}.{node.name}" if module_name else node.name
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         method_id = f"{class_id}.{item.name}"
                         process_scope(item, method_id)
 

@@ -13,6 +13,8 @@ from brain.diff_analyzer import _path_to_module_name
 from brain.test_selector import _build_import_map
 
 
+from typing import Union
+
 def _map_test_to_candidate_symbols(
     test_nodeid: str,
     codebase_dir: Path,
@@ -52,12 +54,12 @@ def _map_test_to_candidate_symbols(
     target_node = None
     if func_name:
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == func_name:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
                 target_node = node
                 break
             elif isinstance(node, ast.ClassDef):
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and item.name == func_name:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == func_name:
                         target_node = item
                         break
     else:

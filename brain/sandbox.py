@@ -4,6 +4,7 @@ import json
 import io
 import tarfile
 import re
+from typing import Optional
 from pathlib import Path
 
 def _translate_nodeid(symbol_id: str) -> str:
@@ -41,7 +42,7 @@ def _translate_nodeid(symbol_id: str) -> str:
     return file_path
 
 
-def run_tests_in_sandbox(code_path: str, test_nodeids: list[str] | None = None, timeout: int = 120) -> dict:
+def run_tests_in_sandbox(code_path: str, test_nodeids: Optional[list[str]] = None, timeout: int = 120) -> dict:
     """
     Run pytest in an isolated Docker container against the specified codebase.
     
@@ -148,7 +149,7 @@ def run_tests_in_sandbox(code_path: str, test_nodeids: list[str] | None = None, 
                 pass
 
 
-def _read_json_report(container) -> dict | None:
+def _read_json_report(container) -> Optional[dict]:
     """Extract and read /tmp/results.json from the container filesystem."""
     try:
         bits, _ = container.get_archive("/tmp/results.json")
@@ -188,7 +189,7 @@ def _normalize_json_report(report: dict) -> dict:
     }
 
 
-def _extract_message(test_report: dict) -> str | None:
+def _extract_message(test_report: dict) -> Optional[str]:
     """Extract crash/failure traceback from the pytest json report."""
     if test_report.get("outcome") in ("failed", "error"):
         call_phase = test_report.get("call", {})

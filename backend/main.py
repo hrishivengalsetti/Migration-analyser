@@ -71,8 +71,12 @@ async def create_run_endpoint(
     finally:
         conn.close()
     
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Adding task run_pipeline for run {run_id}")
     # Trigger background pipeline
     background_tasks.add_task(run_pipeline, run_id)
+    logger.info(f"Task added for run {run_id}")
     
     return CreateRunResponse(run_id=run_id, status=status)
 
@@ -101,6 +105,16 @@ def get_report_endpoint(run_id: str):
     except Exception:
         data = report_data["data"]
         
+    # The frontend expects the report fields to be at the top level
+    # NOT nested under "report". We merge them into the top level.
+    if isinstance(data, dict):
+        response = {
+            "run_id": report_data["run_id"],
+            "generated_at": report_data["generated_at"],
+        }
+        response.update(data)
+        return response
+    
     return {
         "run_id": report_data["run_id"],
         "generated_at": report_data["generated_at"],

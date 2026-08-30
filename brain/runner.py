@@ -6,17 +6,54 @@ from pathlib import Path
 from datetime import datetime, timezone
 import networkx as nx
 
-import database
-from models import (
-    RunStatus,
-    Classification,
-    ReportSummary,
-    GraphNode,
-    GraphEdge,
-    GraphData,
-    Report,
-    ComparisonStatus
-)
+try:
+    import database
+except ImportError:
+    # If run from backend, it might need backend.database
+    try:
+        from backend import database
+    except ImportError:
+        import sys
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        import database
+
+try:
+    from models import (
+        RunStatus,
+        Classification,
+        ReportSummary,
+        GraphNode,
+        GraphEdge,
+        GraphData,
+        Report,
+        ComparisonStatus
+    )
+except ImportError:
+    try:
+        from backend.models import (
+            RunStatus,
+            Classification,
+            ReportSummary,
+            GraphNode,
+            GraphEdge,
+            GraphData,
+            Report,
+            ComparisonStatus
+        )
+    except ImportError:
+        import sys
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        from models import (
+            RunStatus,
+            Classification,
+            ReportSummary,
+            GraphNode,
+            GraphEdge,
+            GraphData,
+            Report,
+            ComparisonStatus
+        )
+
 from brain.diff_analyzer import analyze_file_diff, analyze_symbol_diff
 from brain.graph_builder import build_graph, save_graph
 from brain.blast_radius import compute_blast_radius
@@ -29,12 +66,17 @@ from brain.interpreter import generate_narrative
 
 def _extract_zip(zip_path: Path, target_dir: Path):
     """Extract zip contents to target_dir and flatten a single top-level wrapper dir if present."""
+    import logging
+    logger = logging.getLogger("brain.runner._extract_zip")
+    logger.info(f"Extracting {zip_path} to {target_dir}")
     if target_dir.exists():
         shutil.rmtree(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     
     with zipfile.ZipFile(zip_path, "r") as z:
+        logger.info(f"Zip opened. Extracting to {target_dir}")
         z.extractall(target_dir)
+        logger.info(f"Extraction complete for {target_dir}")
         
     items = list(target_dir.iterdir())
     if len(items) == 1 and items[0].is_dir():
@@ -49,9 +91,23 @@ def run_pipeline(run_id: str):
     Main orchestrator for the analysis pipeline.
     Sequentially executes TASK-004 through TASK-011.
     """
+    import logging
+    # Force log output
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger("brain.runner")
+    
+    # We must ensure background tasks use asyncio and do not fail on imports or db connections
+    logger.info(f"========== STARTING PIPELINE FOR RUN {run_id} ==========")
     try:
+        logger.info(f"Unzip Phase for {run_id}")
         # 1. Unzip Phase
-        orig_zip_str, migr_zip_str = database.get_run_paths(run_id)
+        logger.info("Fetching paths from database...")
+        try:
+            orig_zip_str, migr_zip_str = database.get_run_paths(run_id)
+        except Exception as e:
+            logger.error(f"Error fetching paths: {e}")
+            raise
+        logger.info(f"Paths: orig={orig_zip_str}, migr={migr_zip_str}")
         orig_zip_path = Path(orig_zip_str)
         migr_zip_path = Path(migr_zip_str)
         
@@ -60,8 +116,11 @@ def run_pipeline(run_id: str):
         migr_dir = run_dir / "migrated"
         
         _extract_zip(orig_zip_path, orig_dir)
+        logger.info("Extracted original zip")
         _extract_zip(migr_zip_path, migr_dir)
+        logger.info("Extracted migrated zip")
         
+        logger.info("2. Analysis Phase")
         # 2. Analysis Phase
         database.update_run_status(run_id, RunStatus.ANALYZING.value)
         
@@ -77,6 +136,7 @@ def run_pipeline(run_id: str):
         
         selected_tests = select_tests(migr_dir, affected_symbols)
         
+        logger.info("3. Execution Phase")
         # 3. Execution Phase
         database.update_run_status(run_id, RunStatus.EXECUTING.value)
         
@@ -85,6 +145,7 @@ def run_pipeline(run_id: str):
         
         comparisons = compare_results(orig_results, migr_results)
         
+        logger.info("4. Interpretation Phase")
         # 4. Interpretation Phase
         database.update_run_status(run_id, RunStatus.INTERPRETING.value)
         
@@ -129,6 +190,7 @@ def run_pipeline(run_id: str):
             evidence_data
         )
         
+        logger.info(f"AI Interpretation generated")
         # 5. Completion Phase
         graph_nodes = [
             GraphNode(
@@ -179,6 +241,12 @@ def run_pipeline(run_id: str):
         
         database.save_report(run_id, report_json, created_at_iso)
         database.update_run_status(run_id, RunStatus.COMPLETE.value)
+        logger.info("PIPELINE COMPLETED SUCCESSFULLY!")
+        print("PIPELINE COMPLETED SUCCESSFULLY!")
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"PIPELINE FAILED: {e}\n{traceback.format_exc()}")
+        print(f"PIPELINE FAILED: {e}")
         database.update_run_status(run_id, RunStatus.FAILED.value, str(e))

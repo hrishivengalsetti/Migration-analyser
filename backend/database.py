@@ -51,7 +51,7 @@ def create_run(run_id: str, created_at: str, status: str):
     finally:
         conn.close()
 
-from typing import Optional
+from typing import Optional, Tuple
 
 def update_run_status(run_id: str, status: str, error: Optional[str] = None):
     conn = get_db_connection()
@@ -74,6 +74,18 @@ def get_run(run_id: str) -> Optional[dict]:
         if row:
             return dict(row)
         return None
+    finally:
+        conn.close()
+
+def get_run_paths(run_id: str) -> Tuple[str, str]:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT original_path, migrated_path FROM runs WHERE id = ?", (run_id,))
+        row = cursor.fetchone()
+        if row and row["original_path"] and row["migrated_path"]:
+            return (row["original_path"], row["migrated_path"])
+        raise ValueError(f"Run paths not found or incomplete for run_id: {run_id}")
     finally:
         conn.close()
 

@@ -1,4 +1,5 @@
 import ast
+from typing import Union
 from pathlib import Path
 from brain.diff_analyzer import _path_to_module_name
 
@@ -29,7 +30,7 @@ def _build_import_map(tree: ast.Module) -> dict[str, str]:
 
 
 def _test_references_affected(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    func_node: Union[ast.FunctionDef, ast.AsyncFunctionDef],
     import_map: dict[str, str],
     affected_set: set[str]
 ) -> bool:
@@ -85,7 +86,7 @@ def select_tests(codebase_dir: Path, affected_symbols: list[str]) -> list[str]:
         import_map = _build_import_map(tree)
 
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name.startswith("test_"):
                     test_id = f"{module_name}.{node.name}" if module_name else node.name
                     if _test_references_affected(node, import_map, affected_set):
@@ -93,7 +94,7 @@ def select_tests(codebase_dir: Path, affected_symbols: list[str]) -> list[str]:
             elif isinstance(node, ast.ClassDef):
                 class_id = f"{module_name}.{node.name}" if module_name else node.name
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         if item.name.startswith("test_"):
                             test_id = f"{class_id}.{item.name}"
                             if _test_references_affected(item, import_map, affected_set):

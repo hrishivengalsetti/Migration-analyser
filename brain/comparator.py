@@ -1,3 +1,4 @@
+from typing import Optional
 from models import ComparisonStatus, SymbolTestComparison, BehavioralComparison
 
 def compare_results(original_results: dict, migrated_results: dict) -> BehavioralComparison:
@@ -96,7 +97,7 @@ def compare_results(original_results: dict, migrated_results: dict) -> Behaviora
     )
 
 
-def _classify_outcomes(status_orig: str | None, status_migr: str | None) -> ComparisonStatus:
+def _classify_outcomes(status_orig: Optional[str], status_migr: Optional[str]) -> ComparisonStatus:
     if status_orig is None and status_migr is not None:
         return ComparisonStatus.ADDED
     if status_orig is not None and status_migr is None:

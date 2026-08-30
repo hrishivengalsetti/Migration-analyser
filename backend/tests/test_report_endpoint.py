@@ -31,10 +31,11 @@ def test_get_report_success():
     run_id = post_resp.json()["run_id"]
     
     # Save dummy report
-    save_report(run_id, json.dumps({"test": "data"}), "2026-08-30T00:00:00Z")
+    save_report(run_id, json.dumps({"test": "data", "summary": {"total_files_changed": 5}}), "2026-08-30T00:00:00Z")
     
     get_resp = client.get(f"/api/runs/{run_id}/report")
     assert get_resp.status_code == 200
     res_data = get_resp.json()
     assert res_data["run_id"] == run_id
-    assert res_data["report"] == {"test": "data"}
+    assert res_data["test"] == "data"
+    assert res_data["summary"]["total_files_changed"] == 5

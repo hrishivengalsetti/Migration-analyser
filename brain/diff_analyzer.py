@@ -59,7 +59,9 @@ def _path_to_module_name(rel_path: str) -> str:
     return ".".join(parts)
 
 
-def _extract_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+from typing import Union
+
+def _extract_signature(node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> str:
     return ast.unparse(node.args)
 
 
@@ -77,24 +79,24 @@ def extract_symbols(source: str, module_name: str) -> dict[str, dict]:
     symbols = {}
 
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            symbol_id = f"{module_name}.{node.name}" if module_name else node.name
-            symbols[symbol_id] = {
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            sym_id = f"{module_name}.{node.name}" if module_name else node.name
+            symbols[sym_id] = {
                 "kind": SymbolKind.FUNCTION,
-                "source": ast.get_source_segment(source, node) or ast.unparse(node),
+                "source": ast.unparse(node),
                 "signature": _extract_signature(node),
-                "lineno": node.lineno,
+                "lineno": node.lineno
             }
         elif isinstance(node, ast.ClassDef):
             class_id = f"{module_name}.{node.name}" if module_name else node.name
             symbols[class_id] = {
                 "kind": SymbolKind.CLASS,
-                "source": ast.get_source_segment(source, node) or ast.unparse(node),
-                "signature": node.name,
-                "lineno": node.lineno,
+                "source": ast.unparse(node),
+                "signature": f"class {node.name}",
+                "lineno": node.lineno
             }
             for item in node.body:
-                if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     method_id = f"{class_id}.{item.name}"
                     symbols[method_id] = {
                         "kind": SymbolKind.METHOD,
