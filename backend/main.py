@@ -88,3 +88,22 @@ def get_run_endpoint(run_id: str):
         status=run_data["status"],
         error=run_data["error"]
     )
+
+@app.get("/api/runs/{run_id}/report")
+def get_report_endpoint(run_id: str):
+    report_data = database.get_report(run_id)
+    if not report_data:
+        raise HTTPException(status_code=404, detail="Report not found for this run")
+    
+    import json
+    try:
+        data = json.loads(report_data["data"])
+    except Exception:
+        data = report_data["data"]
+        
+    return {
+        "run_id": report_data["run_id"],
+        "generated_at": report_data["generated_at"],
+        "report": data
+    }
+
