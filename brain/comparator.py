@@ -1,4 +1,4 @@
-from models import ComparisonStatus, TestResultComparison, BehavioralComparison
+from models import ComparisonStatus, SymbolTestComparison, BehavioralComparison
 
 def compare_results(original_results: dict, migrated_results: dict) -> BehavioralComparison:
     """
@@ -23,7 +23,7 @@ def compare_results(original_results: dict, migrated_results: dict) -> Behaviora
 
     all_nodeids = sorted(set(orig_map.keys()) | set(migr_map.keys()))
 
-    test_results: list[TestResultComparison] = []
+    test_results: list[SymbolTestComparison] = []
 
     regressions_count = 0
     fixed_count = 0
@@ -73,7 +73,7 @@ def compare_results(original_results: dict, migrated_results: dict) -> Behaviora
             unverified_count += 1
 
         test_results.append(
-            TestResultComparison(
+            SymbolTestComparison(
                 test_id=nodeid,
                 status_original=status_orig,
                 status_migrated=status_migr,

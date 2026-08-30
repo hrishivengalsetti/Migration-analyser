@@ -1,12 +1,18 @@
-import pytest
-from fastapi.testclient import TestClient
-from main import app, DATA_DIR
 import io
 import os
+import json
+import zipfile
 import shutil
-from database import DB_PATH, init_db, get_run
+import pytest
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+from fastapi.testclient import TestClient
 
-# Delete DB and files before tests to ensure clean state
+from main import app, DATA_DIR
+import database
+from database import DB_PATH, init_db, get_run, get_report
+from models import AIInterpretation, RunStatus, Classification
+
 @pytest.fixture(autouse=True)
 def clean_env():
     if DB_PATH.exists():
@@ -15,69 +21,143 @@ def clean_env():
         shutil.rmtree(DATA_DIR)
     init_db()
     yield
-    # Cleanup after
     if DATA_DIR.exists():
         shutil.rmtree(DATA_DIR)
 
 client = TestClient(app)
 
-def test_runner_saves_files_and_updates_status():
-    # Mock zip files
-    original_file = ("original.zip", io.BytesIO(b"dummy original content"), "application/zip")
-    migrated_file = ("migrated.zip", io.BytesIO(b"dummy migrated content"), "application/zip")
-    
-    response = client.post(
-        "/api/runs",
-        files={"original": original_file, "migrated": migrated_file}
-    )
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert "run_id" in data
-    run_id = data["run_id"]
-    
-    # Check if files were saved
-    run_dir = DATA_DIR / run_id
-    assert run_dir.exists()
-    assert (run_dir / "original.zip").exists()
-    assert (run_dir / "migrated.zip").exists()
-    
-    # Read files to verify content
-    with open(run_dir / "original.zip", "rb") as f:
-        assert f.read() == b"dummy original content"
-        
-    with open(run_dir / "migrated.zip", "rb") as f:
-        assert f.read() == b"dummy migrated content"
-        
-    # Check database status
-    # Because TestClient executes background tasks synchronously before returning,
-    # the status should already be "complete".
-    run_db = get_run(run_id)
-    assert run_db is not None
-    assert run_db["status"] == "complete"
-    assert run_db["error"] is None
+def create_sample_zip(files: dict[str, str]) -> io.BytesIO:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for filename, content in files.items():
+            z.writestr(filename, content)
+    buf.seek(0)
+    return buf
 
-def test_pipeline_error_handler():
-    # To test the error handler, we temporarily monkey-patch the run_pipeline 
-    # to throw an error, but it's simpler to test database update directly for the scope of this stub test
-    import database
-    from database import update_run_status
-    
-    # Insert a dummy run
-    conn = database.get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO runs (id, created_at, status) VALUES (?, ?, ?)",
-            ("dummy-error-id", "2026-01-01T00:00:00Z", "pending")
-        )
-        conn.commit()
-    finally:
-        conn.close()
-        
-    # Manually call update to simulate failure
-    update_run_status("dummy-error-id", "failed", "Simulated error message")
-    
-    run = get_run("dummy-error-id")
+@patch("brain.runner.generate_narrative")
+@patch("brain.runner.run_tests_in_sandbox")
+def test_pipeline_end_to_end_success(mock_sandbox, mock_groq):
+    mock_sandbox.return_value = {
+        "summary": {"passed": 1, "failed": 0, "error": 0, "total": 1},
+        "tests": [{"nodeid": "test_app.test_calc", "outcome": "passed", "duration": 0.1}],
+        "exit_code": 0,
+        "stdout": "PASSED",
+        "stderr": ""
+    }
+    mock_groq.return_value = AIInterpretation(
+        migration_intent="Refactored calculator",
+        risk_summary="Low risk",
+        key_concerns=[],
+        confidence="high"
+    )
+
+    orig_zip = create_sample_zip({
+        "app.py": "def calc(a, b):\n    return a + b\n",
+        "test_app.py": "from app import calc\ndef test_calc():\n    assert calc(1, 2) == 3\n"
+    })
+    migr_zip = create_sample_zip({
+        "app.py": "def calc(a, b):\n    return a + b  # optimized\n",
+        "test_app.py": "from app import calc\ndef test_calc():\n    assert calc(1, 2) == 3\n"
+    })
+
+    res = client.post("/api/runs", files={"original": ("orig.zip", orig_zip, "application/zip"), "migrated": ("migr.zip", migr_zip, "application/zip")})
+    assert res.status_code == 200
+    run_id = res.json()["run_id"]
+
+    run = get_run(run_id)
+    assert run["status"] == "complete"
+    assert run["error"] is None
+
+    rep_db = get_report(run_id)
+    assert rep_db is not None
+    data = json.loads(rep_db["data"])
+    assert data["classification"] == "verified"
+    assert data["summary"]["total_files_changed"] == 1
+
+@patch("brain.runner.generate_narrative")
+@patch("brain.runner.run_tests_in_sandbox")
+def test_pipeline_handles_empty_test_selection(mock_sandbox, mock_groq):
+    mock_sandbox.return_value = {
+        "summary": {"passed": 0, "failed": 0, "error": 0, "total": 0},
+        "tests": [],
+        "exit_code": 0,
+        "stdout": "No tests selected.",
+        "stderr": ""
+    }
+    mock_groq.return_value = AIInterpretation(
+        migration_intent="No tests run",
+        risk_summary="Unverified",
+        key_concerns=[],
+        confidence="none"
+    )
+
+    orig_zip = create_sample_zip({"app.py": "def foo(): pass\n"})
+    migr_zip = create_sample_zip({"app.py": "def foo(): return 1\n"})
+
+    res = client.post("/api/runs", files={"original": ("orig.zip", orig_zip, "application/zip"), "migrated": ("migr.zip", migr_zip, "application/zip")})
+    assert res.status_code == 200
+    run_id = res.json()["run_id"]
+
+    run = get_run(run_id)
+    assert run["status"] == "complete"
+
+    rep_db = get_report(run_id)
+    assert rep_db is not None
+    data = json.loads(rep_db["data"])
+    assert data["classification"] == "unverified"
+
+@patch("brain.runner._extract_zip")
+def test_pipeline_fatal_error_sets_failed_status(mock_extract):
+    mock_extract.side_effect = RuntimeError("Extraction failed due to corrupted zip")
+
+    orig_zip = create_sample_zip({"app.py": "pass"})
+    migr_zip = create_sample_zip({"app.py": "pass"})
+
+    res = client.post("/api/runs", files={"original": ("orig.zip", orig_zip, "application/zip"), "migrated": ("migr.zip", migr_zip, "application/zip")})
+    assert res.status_code == 200
+    run_id = res.json()["run_id"]
+
+    run = get_run(run_id)
     assert run["status"] == "failed"
-    assert run["error"] == "Simulated error message"
+    assert "Extraction failed" in run["error"]
+
+@patch("brain.runner.generate_narrative")
+@patch("brain.runner.run_tests_in_sandbox")
+def test_pipeline_handles_docker_and_groq_failures(mock_sandbox, mock_groq):
+    mock_sandbox.return_value = {
+        "summary": {"passed": 1, "failed": 0, "error": 1, "total": 2},
+        "tests": [
+            {"nodeid": "test_app.test_calc1", "outcome": "passed", "duration": 0.1},
+            {"nodeid": "test_app.test_calc2", "outcome": "error", "duration": 0.0}
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "Container execution timed out"
+    }
+    mock_groq.return_value = AIInterpretation(
+        migration_intent="Unknown",
+        risk_summary="Failed to generate AI summary",
+        key_concerns=["AI interpretation failed."],
+        confidence="none"
+    )
+
+    orig_zip = create_sample_zip({
+        "app.py": "def calc1(): return 1\ndef calc2(): return 2\n",
+        "test_app.py": "from app import calc1, calc2\ndef test_calc1(): assert calc1() == 1\ndef test_calc2(): assert calc2() == 2\n"
+    })
+    migr_zip = create_sample_zip({
+        "app.py": "def calc1(): return 10\ndef calc2(): return 20\n",
+        "test_app.py": "from app import calc1, calc2\ndef test_calc1(): assert calc1() == 1\ndef test_calc2(): assert calc2() == 2\n"
+    })
+
+    res = client.post("/api/runs", files={"original": ("orig.zip", orig_zip, "application/zip"), "migrated": ("migr.zip", migr_zip, "application/zip")})
+    assert res.status_code == 200
+    run_id = res.json()["run_id"]
+
+    run = get_run(run_id)
+    assert run["status"] == "complete"
+
+    rep_db = get_report(run_id)
+    assert rep_db is not None
+    data = json.loads(rep_db["data"])
+    assert data["classification"] == "partially_verified"
